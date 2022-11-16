@@ -1,17 +1,24 @@
-import typing
-
 import numpy as np
 import pandas as pd
 
-from .base import GLM
+from .base import GLM, ZerosInitializer
 from ..optim.sgd import SGD
-from ..optim.losses import Squared
-from ..optim.initializers import Zeros
-from ..base.regressor import MiniBatchRegressor
 from ..utils.pretty import print_table
 
+class Squared:
+    """Squared loss, also known as the L2 loss."""
 
-class LinearRegression(GLM, MiniBatchRegressor):
+    def mean_func(self, y_pred):
+        return y_pred
+
+    def __call__(self, y_true, y_pred):
+        return (y_pred - y_true) * (y_pred - y_true)
+
+    def gradient(self, y_true, y_pred):
+        return 2 * (y_pred - y_true)
+
+
+class LinearRegression(GLM):
     """Linear regression.
 
     This estimator supports learning with mini-batches. On top of the single instance methods, it
@@ -130,7 +137,7 @@ class LinearRegression(GLM, MiniBatchRegressor):
             l2=l2,
             l1=l1,
             clip_gradient=clip_gradient,
-            initializer=initializer if initializer else Zeros(),
+            initializer=initializer if initializer else ZerosInitializer(),
         )
 
     def predict_one(self, x):

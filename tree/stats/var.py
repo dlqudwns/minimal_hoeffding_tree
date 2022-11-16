@@ -2,11 +2,10 @@ import copy
 
 import numpy as np
 
-from .base import Univariate
 from .mean import Mean
 
 
-class Var(Univariate):
+class Var:
     """Running variance using Welford's algorithm.
 
     Parameters

@@ -1,0 +1,17 @@
+digraph {
+	graph [forcelabels=true overlap=false splines=ortho]
+	node [fontname=trebuchet fontsize=11 margin="0.1,0.0" penwidth=1.2 shape=box]
+	edge [center=true fontsize="7  " penwidth=0.6]
+	0 [label=time fillcolor="#FFFFFF" style=filled]
+	1 [label="Mean: 41.06 | Var: 1.282041
+samples: 50" fillcolor="#FFFFFF" style=filled]
+	0 -> 1 [xlabel="≤ 0"]
+	2 [label=time fillcolor="#FFFFFF" style=filled]
+	0 -> 2 [xlabel="> 0"]
+	3 [label="Mean: 75.170068 | Var: 284.676358
+samples: 147" fillcolor="#FFFFFF" style=filled]
+	2 -> 3 [xlabel="≤ 8"]
+	4 [label="Mean: 150.414698 | Var: 5,040.501257
+samples: 381" fillcolor="#FFFFFF" style=filled]
+	2 -> 4 [xlabel="> 8"]
+}

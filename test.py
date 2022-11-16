@@ -20,17 +20,17 @@ for x, y in dataset:
     print(metric)
 
 """
-from river import datasets
+from chick_weights import ChickWeights
 
-dataset = datasets.ChickWeights()
+dataset = ChickWeights()
 print(dataset)
 
 from river.tree.hoeffding_tree_regressor import HoeffdingTreeRegressor
 from tree.hoeffding_tree_regressor import HoeffdingTreeRegressor as mytree
-from river.metrics.r2 import R2
+from tree.metrics.r2 import R2
 
-model = HoeffdingTreeRegressor()
-model2 = mytree()
+model = HoeffdingTreeRegressor(delta=1e-3, grace_period=100)
+model2 = mytree(delta=1e-3, grace_period=100)
 
 metric = R2()
 
@@ -50,3 +50,4 @@ for i, (x, y) in enumerate(dataset):
 
 
     print(i, metric)
+model.draw().render("output.png", format="png")

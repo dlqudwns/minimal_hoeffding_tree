@@ -1,51 +1,52 @@
 
-from .base import Optimizer
+import numpy as np
 
-__all__ = ["SGD"]
+from ..utils.vectordict import VectorDict
 
-
-class SGD(Optimizer):
-    """Plain stochastic gradient descent.
-
-    Parameters
-    ----------
-    lr
-
-    Examples
-    --------
-
-    >>> from river import datasets
-    >>> from river import evaluate
-    >>> from river import linear_model
-    >>> from river import metrics
-    >>> from river import optim
-    >>> from river import preprocessing
-
-    >>> dataset = datasets.Phishing()
-    >>> optimizer = optim.SGD(0.1)
-    >>> model = (
-    ...     preprocessing.StandardScaler() |
-    ...     linear_model.LogisticRegression(optimizer)
-    ... )
-    >>> metric = metrics.F1()
-
-    >>> evaluate.progressive_val_score(dataset, model, metric)
-    F1: 87.85%
-
-    References
-    ----------
-    [^1]: [Robbins, H. and Monro, S., 1951. A stochastic approximation method. The annals of mathematical statistics, pp.400-407](https://pdfs.semanticscholar.org/34dd/d8865569c2c32dec9bf7ffc817ff42faaa01.pdf)
-
-    """
+class SGD:
 
     def __init__(self, lr=0.01):
-        super().__init__(lr)
+        self.lr = lr
+        self.n_iterations = 0
 
     def _step_with_dict(self, w, g):
         for i, gi in g.items():
-            w[i] -= self.learning_rate * gi
+            w[i] -= self.lr * gi
         return w
 
     def _step_with_vector(self, w, g):
-        w -= self.learning_rate * g
+        w -= self.lr * g
+        return w
+
+    def look_ahead(self, w):
+        return w
+
+    def step(self, w, g):
+        """Updates a weight vector given a gradient.
+
+        Parameters
+        ----------
+        w
+            A vector-like object containing weights. The weights are modified in-place.
+        g
+            A vector-like object of gradients.
+
+        Returns
+        -------
+        The updated weights.
+
+        """
+
+        if isinstance(w, (VectorDict, np.ndarray)) and isinstance(
+            g, (VectorDict, np.ndarray)
+        ):
+            try:
+                w = self._step_with_vector(w, g)
+                self.n_iterations += 1
+                return w
+            except NotImplementedError:
+                pass
+
+        w = self._step_with_dict(w, g)
+        self.n_iterations += 1
         return w

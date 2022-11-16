@@ -1,7 +1,5 @@
-from .base import SplitCriterion
 
-
-class VarianceReductionSplitCriterion(SplitCriterion):
+class VarianceReductionSplitCriterion:
     """Variance Reduction split criterion.
 
     Often employed in cases where the target variable is continuous (regression tree),

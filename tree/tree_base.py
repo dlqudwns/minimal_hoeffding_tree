@@ -16,12 +16,10 @@ from xml.etree import ElementTree as ET
 
 import pandas as pd
 
-from .base.base import Base
-
 __all__ = ["Branch", "Leaf"]
 
 
-class Branch(Base, abc.ABC):
+class Branch(abc.ABC):
     """A generic tree branch.
 
     Parameters
@@ -34,25 +32,12 @@ class Branch(Base, abc.ABC):
     def __init__(self, *children):
         self.children = children
 
-    @abc.abstractmethod
-    def next(self, x) -> typing.Union["Branch", "Leaf"]:
-        """Move to the next node down the tree."""
-
-    @abc.abstractmethod
-    def most_common_path(self) -> typing.Tuple[int, typing.Union["Leaf", "Branch"]]:
-        """Return a tuple with the branch index and the child node related to the most
-        traversed path.
-
-        Used in case the split feature is missing from an instance.
-        """
-        pass
-
     @property
     @abc.abstractmethod
     def repr_split(self):
         """String representation of the split."""
 
-    def walk(self, x, until_leaf=True) -> typing.Iterable[typing.Union["Branch", "Leaf"]]:
+    def walk(self, x, until_leaf=True):
         """Iterate over the nodes of the path induced by x."""
         yield self
         try:
@@ -63,7 +48,7 @@ class Branch(Base, abc.ABC):
                 yield node
                 yield from node.walk(x, until_leaf)
 
-    def traverse(self, x, until_leaf=True) -> typing.Union["Branch", "Leaf"]:
+    def traverse(self, x, until_leaf=True):
         """Return the leaf corresponding to the given input."""
         for node in self.walk(x, until_leaf):
             pass
@@ -126,85 +111,9 @@ class Branch(Base, abc.ABC):
             yield self, child
             yield from child.iter_edges()
 
-    def to_dataframe(self) -> pd.DataFrame:
-        """Build a DataFrame containing one record for each node."""
-        node_ids: typing.DefaultDict[typing.Hashable, int] = defaultdict(lambda: len(node_ids))  # type: ignore
-        nodes = []
-
-        queue: "Queue" = Queue()
-        queue.put((self, None, 0))
-
-        while not queue.empty():
-            node, parent, depth = queue.get()
-            nodes.append(
-                {
-                    "node": node_ids[id(node)],
-                    "parent": node_ids[id(parent)] if parent else pd.NA,
-                    "is_leaf": isinstance(node, Leaf),
-                    "depth": depth,
-                    **{k: v for k, v in node.__dict__.items() if k != "children"},
-                }
-            )
-            try:
-                for child in node.children:
-                    queue.put((child, node, depth + 1))
-            except AttributeError:
-                pass
-
-        return pd.DataFrame.from_records(nodes).set_index("node")
-
     def _repr_html_(self):
         from river.tree import viz
 
         div = viz.tree_to_html(self)
         return f"<div>{ET.tostring(div, encoding='unicode')}<style scoped>{viz.CSS}</style></div>"
 
-
-class Leaf(Base):
-    """A generic tree node.
-
-    Parameters
-    ----------
-    kwargs
-        Each provided keyword argument is stored in the leaf as an attribute.
-
-    """
-
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
-
-    def walk(self, x, until_leaf=True):  # noqa
-        yield self
-
-    @property
-    @abc.abstractmethod
-    def __repr__(self):
-        """String representation for visualization purposes."""
-
-    @property
-    def n_nodes(self):
-        return 1
-
-    @property
-    def n_branches(self):
-        return 0
-
-    @property
-    def n_leaves(self):
-        return 1
-
-    @property
-    def height(self):
-        return 1
-
-    def iter_dfs(self):
-        yield self
-
-    def iter_leaves(self):
-        yield self
-
-    def iter_branches(self):  # noqa
-        yield from ()
-
-    def iter_edges(self):  # noqa
-        yield from ()

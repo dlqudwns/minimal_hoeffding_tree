@@ -2,10 +2,7 @@ import copy
 
 import numpy as np
 
-from .base import Univariate
-
-
-class Mean(Univariate):
+class Mean:
     """Running mean.
 
     Attributes
@@ -118,46 +115,3 @@ class Mean(Univariate):
         result -= other
         return result
 
-
-class BayesianMean(Univariate):
-    """Estimates a mean using outside information.
-
-    Parameters
-    ----------
-    prior
-    prior_weight
-
-    References
-    ----------
-    [^1]: [Additive smoothing](https://www.wikiwand.com/en/Additive_smoothing)
-    [^2]: [Bayesian average](https://www.wikiwand.com/en/Bayesian_average)
-    [^3]: [Practical example of Bayes estimators](https://www.wikiwand.com/en/Bayes_estimator#/Practical_example_of_Bayes_estimators)
-
-    """
-
-    def __init__(self, prior: float, prior_weight: float):
-        self.prior = prior
-        self.prior_weight = prior_weight
-        self._mean = Mean()
-
-    @property
-    def name(self):
-        return "bayes_mean"
-
-    def update(self, x):
-        self._mean.update(x)
-        return self
-
-    def revert(self, x):
-        self._mean.revert(x)
-        return self
-
-    def get(self):
-
-        # Uses the notation from https://www.wikiwand.com/en/Bayes_estimator#/Practical_example_of_Bayes_estimators
-        R = self._mean.get()
-        v = self._mean.n
-        m = self.prior_weight
-        C = self.prior
-
-        return (R * v + C * m) / (v + m)

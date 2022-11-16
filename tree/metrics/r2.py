@@ -1,10 +1,7 @@
 from ..stats.var import Var
-from .base import RegressionMetric
-
-__all__ = ["R2"]
 
 
-class R2(RegressionMetric):
+class R2:
     """Coefficient of determination ($R^2$) score
 
     The coefficient of determination, denoted $R^2$ or $r^2$, is the proportion
@@ -40,6 +37,10 @@ class R2(RegressionMetric):
     [^1]: [Coefficient of determination (Wikipedia)](https://en.wikipedia.org/wiki/Coefficient_of_determination)
 
     """
+
+    def __repr__(self):
+        """Return the class name along with the current value of the metric."""
+        return f"{self.__class__.__name__}: {self.get():,.6f}".rstrip("0")
 
     def __init__(self):
         self._y_var = Var()

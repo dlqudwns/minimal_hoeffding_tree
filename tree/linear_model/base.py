@@ -1,17 +1,19 @@
 import contextlib
-import numbers
 import typing
 
 import numpy as np
 import pandas as pd
 
-from ..optim.schedulers import Constant
-from ..optim.initializers import Zeros
 from ..utils.vectordict import VectorDict
 from ..utils.math import clamp
 
 __all__ = ["GLM"]
 
+
+class ZerosInitializer:
+
+    def __call__(self, shape=1):
+        return np.zeros(shape, dtype=float) if shape != 1 else 0.
 
 class GLM:
     """Generalized Linear Model.
@@ -60,11 +62,7 @@ class GLM:
         self.l1 = l1
         self.intercept_init = intercept_init
         self.intercept = intercept_init
-        self.intercept_lr = (
-            Constant(intercept_lr)
-            if isinstance(intercept_lr, numbers.Number)
-            else intercept_lr
-        )
+        self.intercept_lr = intercept_lr
         self.clip_gradient = clip_gradient
         self.initializer = initializer
         self._weights = VectorDict(None)
@@ -82,7 +80,7 @@ class GLM:
 
             # L1-specific parameters
             self.max_cum_l1 = 0
-            self.cum_l1 = VectorDict(None, optim.initializers.Zeros())
+            self.cum_l1 = VectorDict(None, ZerosInitializer())
 
     @property
     def _mutable_attributes(self):
@@ -103,7 +101,7 @@ class GLM:
             self._weights = weights
 
     def _get_intercept_update(self, loss_gradient):
-        return self.intercept_lr.get(self.optimizer.n_iterations) * loss_gradient
+        return self.intercept_lr * loss_gradient
 
     def _fit(self, x, y, w, get_grad):
 
