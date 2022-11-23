@@ -79,44 +79,6 @@ class NumericBinaryBranch(DTBranch):
         return f"{self.feature} ≤ {self.threshold}"
 
 
-class NominalBinaryBranch(DTBranch):
-    def __init__(self, stats, feature, value, depth, left, right, **attributes):
-        super().__init__(stats, left, right, **attributes)
-        self.feature = feature
-        self.value = value
-        self.depth = depth
-
-    def branch_no(self, x):
-        if x[self.feature] == self.value:
-            return 0
-        return 1
-
-    def max_branches(self):
-        return 2
-
-    def most_common_path(self):
-        left, right = self.children
-
-        if left.total_weight < right.total_weight:
-            return 1, right
-        return 0, left
-
-    def repr_branch(self, index: int, shorten=False):
-        if shorten:
-            if index == 0:
-                return str(self.value)
-            else:
-                return f"not {self.value}"
-        else:
-            if index == 0:
-                return f"{self.feature} = {self.value}"
-            return f"{self.feature} ≠ {self.value}"
-
-    @property
-    def repr_split(self):
-        return f"{self.feature} {{=, ≠}} {self.value}"
-
-
 class NumericMultiwayBranch(DTBranch):
     def __init__(self, stats, feature, radius_and_slots, depth, *children, **attributes):
         super().__init__(stats, *children, **attributes)
@@ -163,42 +125,3 @@ class NumericMultiwayBranch(DTBranch):
     def repr_split(self):
         return f"{self.feature} ÷ {self.radius}"
 
-
-class NominalMultiwayBranch(DTBranch):
-    def __init__(self, stats, feature, feature_values, depth, *children, **attributes):
-        super().__init__(stats, *children, **attributes)
-        self.feature = feature
-        self.depth = depth
-
-        # Controls the branch mapping
-        self._mapping = {feat_v: i for i, feat_v in enumerate(feature_values)}
-        self._r_mapping = {i: feat_v for feat_v, i in self._mapping.items()}
-
-    def branch_no(self, x):
-        return self._mapping[x[self.feature]]
-
-    def max_branches(self):
-        return -1
-
-    def most_common_path(self):
-        # Get the most traversed path
-        pos = max(range(len(self.children)), key=lambda i: self.children[i].total_weight)
-
-        return pos, self.children[pos]
-
-    def add_child(self, feature_val, child):
-        self._mapping[feature_val] = len(self.children)
-        self._r_mapping[len(self.children)] = feature_val
-        self.children.append(child)
-
-    def repr_branch(self, index: int, shorten=False):
-        feat_val = self._r_mapping[index]
-
-        if shorten:
-            return str(feat_val)
-
-        return f"{self.feature} = {feat_val}"
-
-    @property
-    def repr_split(self):
-        return f"{self.feature} in {set(self._mapping.keys())}"
