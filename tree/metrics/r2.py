@@ -57,11 +57,6 @@ class R2:
         self._residual_sum_of_squares += squared_error
         return self
 
-    def revert(self, y_true, y_pred, sample_weight=1.0):
-        self._y_var.update(y_true, w=-sample_weight)
-        self._residual_sum_of_squares -= (y_true - y_pred) * (y_true - y_pred) * sample_weight
-        return self
-
     def get(self):
         if self._y_var.mean.n > 1:
             try:

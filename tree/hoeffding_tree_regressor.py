@@ -3,14 +3,19 @@ from copy import deepcopy
 
 from .linear_model.lin_reg import LinearRegression
 
-from .nodes.branch import (
-    DTBranch,
-    NumericBinaryBranch,
-    NumericMultiwayBranch,
-)
+from .nodes.branch import NumericBinaryBranch
 from .nodes.htr_nodes import LeafAdaptive
 from .split_criterion.variance_reduction_split_criterion import VarianceReductionSplitCriterion
 from .splitter.tebst_splitter import TEBSTSplitter
+
+import functools
+import collections
+try:
+    import graphviz
+
+    GRAPHVIZ_INSTALLED = True
+except ImportError:
+    GRAPHVIZ_INSTALLED = False
 
 
 class HoeffdingTreeRegressor:
@@ -86,9 +91,9 @@ class HoeffdingTreeRegressor:
         self.delta = delta
         self.tau = tau
         self.leaf_model = leaf_model if leaf_model else LinearRegression()
-        self.min_samples_split = min_samples_split
+        self.split_criterion = VarianceReductionSplitCriterion(min_samples_split)
 
-        self.splitter = TEBSTSplitter()
+        self.splitter = TEBSTSplitter(self.split_criterion)
 
     @staticmethod
     def _hoeffding_bound(range_val, confidence, n):
@@ -131,7 +136,7 @@ class HoeffdingTreeRegressor:
 
         p_node = None
         node = None
-        if isinstance(self._root, DTBranch):
+        if isinstance(self._root, NumericBinaryBranch):
             path = iter(self._root.walk(x, until_leaf=False))
             while True:
                 aux = next(path, None)
@@ -153,7 +158,7 @@ class HoeffdingTreeRegressor:
                     weight_seen = node.total_weight
                     weight_diff = weight_seen - node.last_split_attempt_at
                     if weight_diff >= self.grace_period:
-                        p_branch = p_node.branch_no(x) if isinstance(p_node, DTBranch) else None
+                        p_branch = p_node.branch_no(x) if isinstance(p_node, NumericBinaryBranch) else None
                         self._attempt_to_split(node, p_node, p_branch)
                         node.last_split_attempt_at = weight_seen
         else:
@@ -171,7 +176,7 @@ class HoeffdingTreeRegressor:
                 else:
                     _, node = node.most_common_path()
                     # And we keep trying to reach a leaf
-                    if isinstance(node, DTBranch):
+                    if isinstance(node, NumericBinaryBranch):
                         node = node.traverse(x, until_leaf=False)
                 # Once a leaf is reached, the traversal can stop
                 if isinstance(node, LeafAdaptive):
@@ -196,11 +201,11 @@ class HoeffdingTreeRegressor:
         """
         pred = 0.0
         if self._root is not None:
-            leaf = self._root.traverse(x, until_leaf=True) if isinstance(self._root, DTBranch) else self._root
+            leaf = self._root.traverse(x, until_leaf=True) if isinstance(self._root, NumericBinaryBranch) else self._root
             pred = leaf.prediction(x, tree=self)
         return pred
 
-    def _attempt_to_split(self, leaf, parent: DTBranch, parent_branch: int, **kwargs):
+    def _attempt_to_split(self, leaf, parent, parent_branch: int, **kwargs):
         """Attempt to split a node.
 
         If the target's variance is high at the leaf node, then:
@@ -228,15 +233,14 @@ class HoeffdingTreeRegressor:
             Other parameters passed to the new branch.
 
         """
-        split_criterion = VarianceReductionSplitCriterion(min_samples_split=self.min_samples_split)
-        best_split_suggestions = leaf.best_split_suggestions(split_criterion, self)
+        best_split_suggestions = leaf.best_split_suggestions(self)
         best_split_suggestions.sort()
         should_split = False
         if len(best_split_suggestions) < 2:
             should_split = len(best_split_suggestions) > 0
         else:
             hoeffding_bound = self._hoeffding_bound(
-                split_criterion.range_of_merit(leaf.stats),
+                self.split_criterion.range_of_merit(leaf.stats),
                 self.delta,
                 leaf.total_weight,
             )
@@ -269,7 +273,7 @@ class HoeffdingTreeRegressor:
                 self._n_inactive_leaves += 1
                 self._n_active_leaves -= 1
             else:
-                branch = NumericMultiwayBranch if split_decision.multiway_split else NumericBinaryBranch
+                branch = NumericBinaryBranch
                 leaves = tuple(
                     self._new_leaf(initial_stats, parent=leaf)
                     for initial_stats in split_decision.children_stats  # type: ignore
@@ -285,3 +289,164 @@ class HoeffdingTreeRegressor:
                     self._root = new_split
                 else:
                     parent.children[parent_branch] = new_split
+        elif (
+            len(best_split_suggestions) >= 2
+            and best_split_suggestions[-1].merit > 0
+            and best_split_suggestions[-2].merit > 0
+        ):
+            last_check_ratio = best_split_suggestions[-2].merit / best_split_suggestions[-1].merit
+            last_check_vr = best_split_suggestions[-1].merit
+
+            leaf.manage_memory(  # type: ignore
+                self.split_criterion, last_check_ratio, last_check_vr, hoeffding_bound
+            )
+
+
+    def draw(self, max_depth: int = None):
+        """Draw the tree using the `graphviz` library.
+
+        Since the tree is drawn without passing incoming samples, classification trees
+        will show the majority class in their leaves, whereas regression trees will
+        use the target mean.
+
+        Parameters
+        ----------
+        max_depth
+            Only the root will be drawn when set to `0`. Every node will be drawn when
+            set to `None`.
+
+        Notes
+        -----
+        Currently, Label Combination Hoeffding Tree Classifier (for multi-label
+        classification) is not supported.
+
+        Examples
+        --------
+        >>> from river import datasets
+        >>> from river import tree
+        >>> model = tree.HoeffdingTreeClassifier(
+        ...    grace_period=5,
+        ...    delta=1e-5,
+        ...    split_criterion='gini',
+        ...    max_depth=10,
+        ...    tau=0.05,
+        ... )
+        >>> for x, y in datasets.Phishing():
+        ...    model = model.learn_one(x, y)
+        >>> dot = model.draw()
+
+        .. image:: ../../docs/img/dtree_draw.svg
+            :align: center
+        """
+        counter = 0
+
+        def iterate(node=None):
+            if node is None:
+                yield None, None, self._root, 0, None
+                yield from iterate(self._root)
+
+            nonlocal counter
+            parent_no = counter
+
+            if isinstance(node, NumericBinaryBranch):
+                for branch_index, child in enumerate(node.children):
+                    counter += 1
+                    yield parent_no, node, child, counter, branch_index
+                    if isinstance(child, NumericBinaryBranch):
+                        yield from iterate(child)
+
+        if max_depth is None:
+            max_depth = -1
+
+        dot = graphviz.Digraph(
+            graph_attr={"splines": "ortho", "forcelabels": "true", "overlap": "false"},
+            node_attr={
+                "shape": "box",
+                "penwidth": "1.2",
+                "fontname": "trebuchet",
+                "fontsize": "11",
+                "margin": "0.1,0.0",
+            },
+            edge_attr={"penwidth": "0.6", "center": "true", "fontsize": "7  "},
+        )
+
+        n_colors = 1
+
+        # Pick a color palette which maps classes to colors
+        new_color = functools.partial(next, iter(_color_brew(n_colors)))
+        palette = collections.defaultdict(new_color)
+
+        for parent_no, parent, child, child_no, branch_index in iterate():
+            if child.depth > max_depth and max_depth != -1:
+                continue
+
+            if isinstance(child, NumericBinaryBranch):
+                text = f"{child.feature}"  # type: ignore
+            else:
+                text = f"{repr(child)}\nsamples: {int(child.total_weight)}"
+
+            fillcolor = "#FFFFFF"
+
+            dot.node(f"{child_no}", text, fillcolor=fillcolor, style="filled")
+
+            if parent_no is not None:
+                dot.edge(
+                    f"{parent_no}",
+                    f"{child_no}",
+                    xlabel=parent.repr_branch(branch_index, shorten=True),
+                )
+
+        return dot
+
+
+# Utility adapted from the original creme's implementation
+def _color_brew(n: int):
+    """Generate n colors with equally spaced hues.
+
+    Parameters
+    ----------
+    n
+        The number of required colors.
+
+    Returns
+    -------
+        List of n tuples of form (R, G, B) being the components of each color.
+    References
+    ----------
+    https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/tree/_export.py
+    """
+    colors = []
+
+    # Initialize saturation & value; calculate chroma & value shift
+    s, v = 0.75, 0.9
+    c = s * v
+    m = v - c
+
+    for h in [i for i in range(25, 385, int(360 / n))]:
+
+        # Calculate some intermediate values
+        h_bar = h / 60.0
+        x = c * (1 - abs((h_bar % 2) - 1))
+
+        # Initialize RGB with same hue & chroma as our color
+        rgb = [
+            (c, x, 0),
+            (x, c, 0),
+            (0, c, x),
+            (0, x, c),
+            (x, 0, c),
+            (c, 0, x),
+            (c, x, 0),
+        ]
+        r, g, b = rgb[int(h_bar)]
+
+        # Shift the initial RGB values to match value and store
+        colors.append(((int(255 * (r + m))), (int(255 * (g + m))), (int(255 * (b + m)))))
+
+    return colors
+
+
+# Utility adapted from the original creme's implementation
+def transparency_hex(color, alpha: float) -> str:
+    """Apply alpha coefficient on hexadecimal color."""
+    return "#%02x%02x%02x" % tuple([int(round(alpha * c + (1 - alpha) * 255, 0)) for c in color])

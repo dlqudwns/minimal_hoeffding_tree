@@ -16,8 +16,8 @@ class TEBSTSplitter(EBSTSplitter):
 
     """
 
-    def __init__(self, digits: int = 1):
-        super().__init__()
+    def __init__(self, split_criterion, digits: int = 1):
+        super().__init__(split_criterion)
         self.digits = digits
 
     def update(self, att_val, target_val, sample_weight):
@@ -26,7 +26,3 @@ class TEBSTSplitter(EBSTSplitter):
             super().update(att_val, target_val, sample_weight)
         except TypeError:  # feature value is None
             pass
-
-    def cond_proba(self, att_val, target_val):
-        """Not implemented in regression splitters."""
-        raise NotImplementedError

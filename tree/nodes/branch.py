@@ -1,53 +1,36 @@
-import abc
-import math
 
-from ..tree_base import Branch
-
-
-class DTBranch(Branch):
-    def __init__(self, stats, *children, **attributes):
-        super().__init__(*children)
-        # The number of branches can increase in runtime
-        self.children = list(self.children)
-
+class NumericBinaryBranch:
+    def __init__(self, stats, feature, threshold, depth, left, right, **attributes):
         self.stats = stats
+        self.feature = feature
+        self.threshold = threshold
+        self.depth = depth
+        self.children = [left, right]
         self.__dict__.update(attributes)
+
+    def walk(self, x, until_leaf=True):
+        """Iterate over the nodes of the path induced by x."""
+        yield self
+        try:
+            yield from self.next(x).walk(x, until_leaf)
+        except KeyError:
+            if until_leaf:
+                _, node = self.most_common_path()
+                yield node
+                yield from node.walk(x, until_leaf)
+
+    def traverse(self, x, until_leaf=True):
+        """Return the leaf corresponding to the given input."""
+        for node in self.walk(x, until_leaf):
+            pass
+        return node
 
     @property
     def total_weight(self):
         return sum(child.total_weight for child in filter(None, self.children))
 
-    @abc.abstractmethod
-    def branch_no(self, x):
-        pass
-
     def next(self, x):
         return self.children[self.branch_no(x)]
-
-    @abc.abstractmethod
-    def max_branches(self):
-        pass
-
-    @abc.abstractmethod
-    def repr_branch(self, index: int, shorten=False):
-        """Return a string representation of the test performed in the branch at `index`.
-
-        Parameters
-        ----------
-        index
-            The branch index.
-        shorten
-            If True, return a shortened version of the performed test.
-        """
-        pass
-
-
-class NumericBinaryBranch(DTBranch):
-    def __init__(self, stats, feature, threshold, depth, left, right, **attributes):
-        super().__init__(stats, left, right, **attributes)
-        self.feature = feature
-        self.threshold = threshold
-        self.depth = depth
 
     def branch_no(self, x):
         if x[self.feature] <= self.threshold:
@@ -77,51 +60,3 @@ class NumericBinaryBranch(DTBranch):
     @property
     def repr_split(self):
         return f"{self.feature} ≤ {self.threshold}"
-
-
-class NumericMultiwayBranch(DTBranch):
-    def __init__(self, stats, feature, radius_and_slots, depth, *children, **attributes):
-        super().__init__(stats, *children, **attributes)
-
-        self.feature = feature
-        self.radius, slot_ids = radius_and_slots
-        self.depth = depth
-
-        # Controls the branch mapping
-        self._mapping = {s: i for i, s in enumerate(slot_ids)}
-        self._r_mapping = {i: s for s, i in self._mapping.items()}
-
-    def branch_no(self, x):
-        slot = math.floor(x[self.feature] / self.radius)
-
-        return self._mapping[slot]
-
-    def max_branches(self):
-        return -1
-
-    def most_common_path(self):
-        # Get the most traversed path
-        pos = max(range(len(self.children)), key=lambda i: self.children[i].total_weight)
-
-        return pos, self.children[pos]
-
-    def add_child(self, feature_val, child):
-        slot = math.floor(feature_val / self.radius)
-
-        self._mapping[slot] = len(self.children)
-        self._r_mapping[len(self.children)] = slot
-        self.children.append(child)
-
-    def repr_branch(self, index: int, shorten=False):
-        lower = self._r_mapping[index] * self.radius
-        upper = lower + self.radius
-
-        if shorten:
-            return f"[{round(lower, 4)}, {round(upper, 4)})"
-
-        return f"{lower} ≤ {self.feature} < {upper}"
-
-    @property
-    def repr_split(self):
-        return f"{self.feature} ÷ {self.radius}"
-

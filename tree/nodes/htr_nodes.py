@@ -69,18 +69,18 @@ class LeafAdaptive:
             return self._leaf_model.predict_one(x)
 
     def update_splitters(self, x, y, sample_weight):
-        for att_id, att_val in x.items():
-            if att_id in self._disabled_attrs:
+        for i, val in enumerate(x):
+            if i in self._disabled_attrs:
                 continue
 
             try:
-                splitter = self.splitters[att_id]
+                splitter = self.splitters[i]
             except KeyError:
                 splitter = copy.deepcopy(self.splitter)
-                self.splitters[att_id] = splitter
-            splitter.update(att_val, y, sample_weight)
+                self.splitters[i] = splitter
+            splitter.update(val, y, sample_weight)
 
-    def best_split_suggestions(self, criterion, tree):
+    def best_split_suggestions(self, tree):
         """Find possible split candidates."""
         best_suggestions = []
         pre_split_dist = self.stats
@@ -89,9 +89,7 @@ class LeafAdaptive:
             null_split = BranchFactory()
             best_suggestions.append(null_split)
         for att_id, splitter in self.splitters.items():
-            best_suggestion = splitter.best_evaluated_split_suggestion(
-                criterion, pre_split_dist, att_id, tree.binary_split
-            )
+            best_suggestion = splitter.best_evaluated_split_suggestion(pre_split_dist, att_id)
             best_suggestions.append(best_suggestion)
 
         return best_suggestions
@@ -114,30 +112,28 @@ class LeafAdaptive:
     def walk(self, x, until_leaf=True):  # noqa
         yield self
 
-    @property
-    def n_nodes(self):
-        return 1
+    def manage_memory(self, criterion, last_check_ratio, last_check_vr, last_check_e):
+        """Trigger Attribute Observers' memory management routines.
 
-    @property
-    def n_branches(self):
-        return 0
+        Currently, only `EBSTSplitter` and `TEBSTSplitter` have support to this feature.
 
-    @property
-    def n_leaves(self):
-        return 1
-
-    @property
-    def height(self):
-        return 1
-
-    def iter_dfs(self):
-        yield self
-
-    def iter_leaves(self):
-        yield self
-
-    def iter_branches(self):  # noqa
-        yield from ()
-
-    def iter_edges(self):  # noqa
-        yield from ()
+        Parameters
+        ----------
+        criterion
+            Split criterion
+        last_check_ratio
+            The ratio between the second best candidate's merit and the merit of the best
+            split candidate.
+        last_check_vr
+            The best candidate's split merit.
+        last_check_e
+            Hoeffding bound value calculated in the last split attempt.
+        """
+        for splitter in self.splitters.values():
+            splitter.remove_bad_splits(
+                criterion=criterion,
+                last_check_ratio=last_check_ratio,
+                last_check_vr=last_check_vr,
+                last_check_e=last_check_e,
+                pre_split_dist=self.stats,
+            )
