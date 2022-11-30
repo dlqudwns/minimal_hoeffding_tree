@@ -4,7 +4,7 @@ import functools
 import math
 import typing
 
-from .stats.var import Var
+from .stats import Var
 
 @functools.total_ordering
 @dataclasses.dataclass
@@ -29,13 +29,17 @@ class BranchFactory:
 
     def assemble(
         self,
-        branch,  # typing.Type[DTBranch],
+        branch,
         stats: typing.Union[typing.Dict, Var],
         depth: int,
+        parent,
         *children,
         **kwargs,
     ):
-        return branch(stats, self.feature, self.split_info, depth, *children, **kwargs)
+        new_branch = branch(stats, self.feature, self.split_info, depth, parent, *children, **kwargs)
+        for child in children:
+            child.parent = new_branch
+        return new_branch
 
     def __lt__(self, other):
         return self.merit < other.merit

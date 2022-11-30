@@ -3,14 +3,42 @@
 import numpy as np
 from river.tree.hoeffding_tree_regressor import HoeffdingTreeRegressor
 from tree.hoeffding_tree_regressor import HoeffdingTreeRegressor as mytree
-from tree.metrics.r2 import R2
+from tree.hoeffding_tree.stats import Var
 
+class R2:
 
-#for i, (x, y) in enumerate(dataset):
+    def __repr__(self):
+        """Return the class name along with the current value of the metric."""
+        return f"{self.__class__.__name__}: {self.get():,.6f}".rstrip("0")
+
+    def __init__(self):
+        self._y_var = Var()
+        self._total_sum_of_squares = 0
+        self._residual_sum_of_squares = 0
+
+    @property
+    def bigger_is_better(self):
+        return True
+
+    def update(self, y_true, y_pred, sample_weight=1.0):
+        self._y_var.update(y_true, w=sample_weight)
+        squared_error = (y_true - y_pred) * (y_true - y_pred) * sample_weight
+        self._residual_sum_of_squares += squared_error
+        return self
+
+    def get(self):
+        if self._y_var.mean.n > 1:
+            try:
+                total_sum_of_squares = (self._y_var.mean.n - 1) * self._y_var.get()
+                return 1 - (self._residual_sum_of_squares / total_sum_of_squares)
+            except ZeroDivisionError:
+                return 0.0
+        return 0.0
+
 
 def main():
-    model = HoeffdingTreeRegressor(delta=1e-3, grace_period=100)
-    model2 = mytree(delta=1e-3, grace_period=100)
+    model = HoeffdingTreeRegressor(delta=1e-1, grace_period=100)
+    model2 = mytree(delta=1e-1, grace_period=100)
 
     metric = R2()
     np.random.seed(0)
@@ -42,14 +70,6 @@ def main():
 
         print(i, metric)
     model.draw().render("output.png", format="png")
+    model2.draw().render("output2.png", format="png")
 
 main()
-
-# WIth basic vectordict - based: 
-# node.learnone: 400    2181414.9   5453.5     74.2
-# attempt_to_split: 753271.0 376635.5     25.6 
-
-# Changing to numpy-based - similar performance
-# node.learnone: 400    2029851.1   5074.6     73.2
-# attempt_to_split: 737562.2 368781.1     26.6 
-
